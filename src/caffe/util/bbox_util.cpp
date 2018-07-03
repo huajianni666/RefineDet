@@ -1320,6 +1320,7 @@ void GetGroundTruth(const Dtype* gt_data, const int num_gt,
     CHECK_NE(background_label_id, label)
         << "Found background label in the dataset.";
     bool difficult = static_cast<bool>(gt_data[start_idx + 7]);
+    int pose = static_cast<int>(gt_data[start_idx + 8]);
     if (!use_difficult_gt && difficult) {
       // Skip reading difficult ground truth.
       continue;
@@ -1331,6 +1332,7 @@ void GetGroundTruth(const Dtype* gt_data, const int num_gt,
     bbox.set_xmax(gt_data[start_idx + 5]);
     bbox.set_ymax(gt_data[start_idx + 6]);
     bbox.set_difficult(difficult);
+    bbox.set_pose(pose);
     float bbox_size = BBoxSize(bbox);
     bbox.set_size(bbox_size);
     (*all_gt_bboxes)[item_id].push_back(bbox);
@@ -1364,6 +1366,7 @@ void GetGroundTruth(const Dtype* gt_data, const int num_gt,
     CHECK_NE(background_label_id, label)
         << "Found background label in the dataset.";
     bool difficult = static_cast<bool>(gt_data[start_idx + 7]);
+    int pose = static_cast<int>(gt_data[start_idx + 8]);
     if (!use_difficult_gt && difficult) {
       // Skip reading difficult ground truth.
       continue;
@@ -1373,6 +1376,7 @@ void GetGroundTruth(const Dtype* gt_data, const int num_gt,
     bbox.set_xmax(gt_data[start_idx + 5]);
     bbox.set_ymax(gt_data[start_idx + 6]);
     bbox.set_difficult(difficult);
+    bbox.set_pose(pose);
     float bbox_size = BBoxSize(bbox);
     bbox.set_size(bbox_size);
     (*all_gt_bboxes)[item_id][label].push_back(bbox);
@@ -2090,6 +2094,70 @@ template void EncodeConfPrediction(const double* conf_data, const int num,
       const vector<vector<int> >& all_neg_indices,
       const map<int, vector<NormalizedBBox> >& all_gt_bboxes,
       double* conf_pred_data, double* conf_gt_data);
+
+//new for pose
+template <typename Dtype>
+void EncodePosePrediction(const Dtype* pose_data, const int num,
+      const int num_priors, const MultiBoxLossParameter& multibox_loss_param,
+      const vector<map<int, vector<int> > >& all_match_indices,
+      const vector<vector<int> >& all_neg_indices,
+      const map<int, vector<NormalizedBBox> >& all_gt_bboxes,
+      Dtype* pose_pred_data, Dtype* pose_gt_data) {
+
+  const int aspect_classes = 4;
+
+  const MiningType mining_type = multibox_loss_param.mining_type();
+  bool do_neg_mining;
+  do_neg_mining = false;
+  // we dont do negative mining in pose prediction
+  //do_neg_mining = mining_type != MultiBoxLossParameter_MiningType_NONE;
+  const ConfLossType pose_loss_type = multibox_loss_param.pose_loss_type();
+  int count = 0;
+  for (int i = 0; i < num; ++i) {
+    if (all_gt_bboxes.find(i) != all_gt_bboxes.end()) {
+      // Save matched (positive) bboxes scores and labels.
+      const map<int, vector<int> >& match_indices = all_match_indices[i];
+      for (map<int, vector<int> >::const_iterator it =
+          match_indices.begin(); it != match_indices.end(); ++it) {
+        const vector<int>& match_index = it->second;
+        CHECK_EQ(match_index.size(), num_priors);
+        for (int j = 0; j < num_priors; ++j) {
+          if (match_index[j] <= -1) {
+            continue;
+          }
+          const int gt_label = all_gt_bboxes.find(i)->second[match_index[j]].pose();
+          int idx = do_neg_mining ? count : j;
+          switch (pose_loss_type) {
+            case MultiBoxLossParameter_ConfLossType_SOFTMAX:
+              pose_gt_data[idx] = gt_label;
+              break;
+            case MultiBoxLossParameter_ConfLossType_LOGISTIC:
+              pose_gt_data[idx * aspect_classes + gt_label] = 1;
+              break;
+            default:
+              LOG(FATAL) << "Unknown pose loss type.";
+          }
+        }
+      }
+    }
+    pose_gt_data += num_priors;
+  }
+}
+
+// Explicite initialization.
+template void EncodePosePrediction(const float* pose_data, const int num,
+      const int num_priors, const MultiBoxLossParameter& multibox_loss_param,
+      const vector<map<int, vector<int> > >& all_match_indices,
+      const vector<vector<int> >& all_neg_indices,
+      const map<int, vector<NormalizedBBox> >& all_gt_bboxes,
+      float* pose_pred_data, float* pose_gt_data);
+template void EncodePosePrediction(const double* pose_data, const int num,
+      const int num_priors, const MultiBoxLossParameter& multibox_loss_param,
+      const vector<map<int, vector<int> > >& all_match_indices,
+      const vector<vector<int> >& all_neg_indices,
+      const map<int, vector<NormalizedBBox> >& all_gt_bboxes,
+      double* pose_pred_data, double* pose_gt_data);
+
 
 template <typename Dtype>
 void GetPriorBBoxes(const Dtype* prior_data, const int num_priors,
