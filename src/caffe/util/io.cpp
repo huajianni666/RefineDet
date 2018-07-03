@@ -283,6 +283,7 @@ bool ReadXMLToAnnotatedDatum(const string& labelfile, const int img_height,
     if (v1.first == "object") {
       Annotation* anno = NULL;
       bool difficult = false;
+      int pose = 0;
       ptree object = v1.second;
       BOOST_FOREACH(ptree::value_type &v2, object.get_child("")) {
         ptree pt2 = v2.second;
@@ -317,6 +318,9 @@ bool ReadXMLToAnnotatedDatum(const string& labelfile, const int img_height,
           anno->set_instance_id(instance_id++);
         } else if (v2.first == "difficult") {
           difficult = pt2.data() == "1";
+        } else if (v2.first == "pose") {
+          int pose = pt2.get("pose", 0);
+          std::cout<<"the pose of this face is"<<pose;
         } else if (v2.first == "bndbox") {
           int xmin = pt2.get("xmin", 0);
           int ymin = pt2.get("ymin", 0);
@@ -350,6 +354,7 @@ bool ReadXMLToAnnotatedDatum(const string& labelfile, const int img_height,
           bbox->set_xmax(static_cast<float>(xmax) / width);
           bbox->set_ymax(static_cast<float>(ymax) / height);
           bbox->set_difficult(difficult);
+          bbox->set_pose(pose);
         }
       }
     }
